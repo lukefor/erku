@@ -1,0 +1,3 @@
+# Databases and downloaded playlists/EPGs are created at runtime by the web manager.
+*
+!.gitignore
