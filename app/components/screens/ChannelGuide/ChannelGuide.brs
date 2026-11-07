@@ -461,6 +461,24 @@ function GetSelectedCatchupContent( allow_current as boolean ) as dynamic
 '}
 end function
 
+' Returns true if the selected channel can play programs that have ended.
+function SelectedChannelSupportsCatchup() as boolean
+'{
+	if m.top.content <> invalid
+	'{
+		content_index = GetContentIndex( m.content_index )
+		if content_index <> -1 and content_index < m.top.content.GetChildCount()
+		'{
+			return ( m.top.content.GetChild( content_index ).CatchupSource <> "" )
+		'}
+		end if
+	'}
+	end if
+
+	return false
+'}
+end function
+
 ' Sets how far back the guide can scroll based on the channel with the most catch-up days.
 sub UpdateMinTimeBarTimeOffset()
 '{
@@ -1400,7 +1418,23 @@ sub ScrollX( scroll_type as integer )
 
 	skip_time_bar_update = false
 
-	if scroll_type = 101 or scroll_type = 110  ' Move Left
+	if scroll_type = 103	' Jump to the current time.
+	'{
+		if m.channel_list_selected = false
+		'{
+			if m.selected_program_index > 0
+			'{
+				m.programs.GetChild( m.selected_row_index ).GetChild( m.selected_program_index ).GetChild( 0 ).color = m.row_color
+				m.selected_program_index = 0
+				m.programs.GetChild( m.selected_row_index ).GetChild( m.selected_program_index ).GetChild( 0 ).color = m.row_selected_color
+			'}
+			end if
+
+			m.time_bar_time_offset = 0
+		'}
+		end if
+	'}
+	else if scroll_type = 101 or scroll_type = 110  ' Move Left
 	'{
 		if scroll_type = 101 and m.selected_program_index > 0
 		'{
@@ -1415,8 +1449,9 @@ sub ScrollX( scroll_type as integer )
 			UpdateProgramInfo( content_index, m.first_column_items[ m.selected_program_index ].index, m.first_column_items[ m.selected_program_index ].start_time, m.first_column_items[ m.selected_program_index ].end_time )
 		'}
 		' Scroll back in time. Scrolling before the current time (catch-up) is only possible if a channel supports it.
-		' When displaying the current time, the left button selects the channel list and the rewind button scrolls into the past.
-		else if m.channel_list_selected = false and m.time_bar_time_offset > m.min_time_bar_time_offset and ( m.time_bar_time_offset <> 0 or scroll_type = 110 )
+		' When displaying the current time, the left button only scrolls into the past if the selected channel supports catch-up. Otherwise it selects the channel list.
+		' The channel list is also selected once we've scrolled as far back as we can.
+		else if m.channel_list_selected = false and m.time_bar_time_offset > m.min_time_bar_time_offset and ( m.time_bar_time_offset <> 0 or scroll_type = 110 or SelectedChannelSupportsCatchup() = true )
 		'{
 			if m.selected_program_index > 0
 			'{
@@ -1993,6 +2028,17 @@ function OnKeyEvent( key as string, press as boolean ) as boolean
 			HandleScroll()
 
 			m.scroll_timer.control = "start"
+
+			handled = true
+		'}
+		else if key = "replay"
+		'{
+			' Return to the current time after scrolling into the past or future.
+			if m.top.menu_state = 1 and m.top.content <> invalid and m.top.content.GetChildCount() > 0 and m.time_bar_time_offset <> 0
+			'{
+				ScrollX( 103 )
+			'}
+			end if
 
 			handled = true
 		'}

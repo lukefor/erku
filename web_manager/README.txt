@@ -48,7 +48,9 @@ Process the playlist after updating to this version. Existing channels will have
 Programs in the EPG are kept for as long as a channel can play them, so the EPG needs to include past programs (or be processed regularly) for them to be available.
 
 In the Erku client's channel guide:
-- Press rewind to scroll back before the current time. Left/right scroll by 30 minutes once you're viewing past times.
+- Press left on a channel that supports catch-up to scroll back before the current time (rewind scrolls back 2 hours at a time).
+  Left selects the channel list once you can't scroll back any further, or straight away on channels without catch-up.
+- Press instant replay to return to the current time.
 - Press OK on a program that has ended to watch it. Programs that can be watched show "Catch-up" in their information.
 - Press options (*) on a program that's airing (or has ended) and choose "Play from Start" to watch it from its beginning.
 While watching a Live TV channel, press the instant replay button to watch the current program from its beginning.
