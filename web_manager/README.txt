@@ -21,7 +21,7 @@ The channels.db and vod.db databases have to be created first before any content
 Channel numbers
 ---------------
 
-Channels are numbered using the playlist's tvg-chno attribute (channel-number and tvg-num are also read), or tvg-id if it's a plain number.
+Channels are numbered using the playlist's ch-number attribute (tvg-chno, channel-number, and tvg-num are also read).
 Channels without a number are given the next unused number. Reprocessing a playlist updates the numbers of existing channels that have one in the playlist.
 
 Catch-up (timeshift/archive)

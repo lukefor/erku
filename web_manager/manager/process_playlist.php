@@ -259,7 +259,7 @@ if ( $handle )
 
 						$catchup = MergeCatchupAttributes( ParseCatchupAttributes( $line ), $header_catchup );
 
-						$number = GetM3UChannelNumber( $line, $guide_id_name );
+						$number = GetM3UChannelNumber( $line );
 
 						// Groups
 						if ( !array_key_exists( $group, $groups ) )
