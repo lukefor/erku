@@ -541,7 +541,7 @@ sub LoadContent( content_type as integer, sort_type as integer, id as integer, c
 						'}
 						end if
 
-						SetChannelCatchupInfo( node, value, GetDeviceTimeZoneOffset() )
+						SetChannelExtraInfo( node, value, GetDeviceTimeZoneOffset() )
 
 						content.AppendChild( node )
 					'}
@@ -692,7 +692,7 @@ sub LoadEPG( sort_type as integer, id as integer, content_limit as integer, cont
 				'}
 				end if
 
-				SetChannelCatchupInfo( channel_node, channel, time_zone_offset )
+				SetChannelExtraInfo( channel_node, channel, time_zone_offset )
 
 				for each program in channel.programs
 				'{
@@ -845,7 +845,7 @@ sub LoadChannel( id as integer, channel_number as integer )
 				'}
 				end if
 
-				SetChannelCatchupInfo( node, value, GetDeviceTimeZoneOffset() )
+				SetChannelExtraInfo( node, value, GetDeviceTimeZoneOffset() )
 
 				content.AppendChild( node )
 
@@ -929,11 +929,17 @@ function GetDeviceTimeZoneOffset() as integer
 '}
 end function
 
-' Copies the catch-up values of a channel returned by the web manager to its ChannelContentNode.
+' Copies the group name and catch-up values of a channel returned by the web manager to its ChannelContentNode.
 ' Older web managers don't return them, and the channel won't support catch-up.
-sub SetChannelCatchupInfo( node as object, value as object, time_zone_offset as integer )
+sub SetChannelExtraInfo( node as object, value as object, time_zone_offset as integer )
 '{
 	node.TimeZoneOffset = time_zone_offset
+
+	if value.group_name <> invalid
+	'{
+		node.GroupTitle = value.group_name
+	'}
+	end if
 
 	if value.catchup_source <> invalid and value.catchup_source <> ""
 	'{

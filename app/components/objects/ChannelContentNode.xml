@@ -18,6 +18,7 @@
 		<field id="SeasonYear" type="string" value="" />
 		<field id="HttpHeaders" type="array" value="" />
 		<field id="Favorite" type="bool" value="false" />
+		<field id="GroupTitle" type="string" value="" />	<!-- The name of the channel's group (the playlist's group-title). -->
 		<field id="SubtitleConfig" type="assocarray" value="" />
 		<!-- Catch-up: the URL template of archived programs. Empty if the channel doesn't support catch-up. -->
 		<field id="CatchupSource" type="string" value="" />

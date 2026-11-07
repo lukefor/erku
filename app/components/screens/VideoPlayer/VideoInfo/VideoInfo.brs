@@ -699,7 +699,11 @@ sub UpdateProgramInfo()
 			end if
 
 			release_info.Push( "Catch-up" )
-			release_info.Push( m.top.content.Title )
+			if m.top.content.GroupTitle <> ""
+			'{
+				release_info.Push( m.top.content.GroupTitle )
+			'}
+			end if
 
 			channel_number_text = m.top.content.Number.ToStr()
 		'}
@@ -807,7 +811,11 @@ sub UpdateProgramInfo()
 			'}
 			end if
 
-			release_info.Push( m.top.content.Title )
+			if m.top.content.GroupTitle <> ""
+			'{
+				release_info.Push( m.top.content.GroupTitle )
+			'}
+			end if
 
 			channel_number_text = m.top.content.Number.ToStr()
 		'}

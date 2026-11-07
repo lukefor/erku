@@ -1104,7 +1104,7 @@ sub UpdateProgramInfo( content_index as integer, program_index as integer, start
 		if m.channel_list_selected = true
 		'{
 			m.program_name.text = m.top.content.GetChild( content_index ).Title
-			m.channel_name.text = ""
+			m.channel_name.text = m.top.content.GetChild( content_index ).GroupTitle
 			m.program_description.text = ""
 		'}
 		else
@@ -1124,24 +1124,37 @@ sub UpdateProgramInfo( content_index as integer, program_index as integer, start
 			'}
 			end if
 
-			time_string = ""
+			' Program time • Length • Catch-up • Group
+			info = []
 			if start_time > 0 and end_time > start_time
 			'{
 				date = CreateObject( "roDateTime" )
 				date.FromSeconds( start_time )
 				time_string = date.asTimeStringLoc( "hh:mm a" ) + " - "
 				date.FromSeconds( end_time )
-				time_string = time_string + date.asTimeStringLoc( "hh:mm a" ) + " • " + FormatRuntime( end_time - start_time ) + " • "
+				info.Push( time_string + date.asTimeStringLoc( "hh:mm a" ) )
+
+				runtime = FormatRuntime( end_time - start_time )
+				if runtime <> ""
+				'{
+					info.Push( runtime )
+				'}
+				end if
 
 				' The program can be watched from its beginning.
 				if program_index <> -1 and Catchup_IsAvailable( m.top.content.GetChild( content_index ), start_time, end_time, true )
 				'{
-					time_string = time_string + "Catch-up • "
+					info.Push( "Catch-up" )
 				'}
 				end if
 			'}
 			end if
-			m.channel_name.text = time_string + m.top.content.GetChild( content_index ).Title
+			if m.top.content.GetChild( content_index ).GroupTitle <> ""
+			'{
+				info.Push( m.top.content.GetChild( content_index ).GroupTitle )
+			'}
+			end if
+			m.channel_name.text = info.Join( " • " )
 		'}
 		end if
 	'}
@@ -1581,15 +1594,16 @@ sub ScrollX( scroll_type as integer )
 			'}
 			end if
 			m.program_name.text = m.top.content.GetChild( content_index ).Title
+			m.channel_name.text = m.top.content.GetChild( content_index ).GroupTitle
 		'}
 		else
 		'{
 			m.channel_logo.uri = ""
 			m.channel_number.text = ""
 			m.program_name.text = ""
+			m.channel_name.text = ""
 		'}
 		end if
-		m.channel_name.text = ""
 		m.program_description.text = ""
 	'}
 	else if m.time_bar_time_offset <> time_bar_time_offset

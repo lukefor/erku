@@ -282,6 +282,7 @@ function Catchup_CreateContent( channel as object, program_index as integer, all
 	content.HDPosterUrl = channel.HDPosterUrl
 	content.HttpHeaders = channel.HttpHeaders
 	content.Favorite = channel.Favorite
+	content.GroupTitle = channel.GroupTitle
 	content.CatchupSource = channel.CatchupSource
 	content.CatchupStreamFormat = channel.CatchupStreamFormat
 	content.CatchupDays = channel.CatchupDays

@@ -1,5 +1,6 @@
 <?php
 require_once( "catchup.php" );
+require_once( "channel_groups.php" );
 
 $type = isset( $_REQUEST[ "type" ] ) ? ( int )$_REQUEST[ "type" ] : -1;
 $sort = isset( $_REQUEST[ "sort" ] ) ? ( int )$_REQUEST[ "sort" ] : -1;
@@ -1182,6 +1183,11 @@ else if ( $type == 10 )	// Live TV Channel and its group tree.
 	}
 
 	$db->close();
+}
+
+if ( $type == 0 || $type == 10 )	// Live TV channels.
+{
+	AddChannelGroupNames( $channels_file_path, $json_array[ "data" ][ "values" ] );
 }
 
 header( "Access-Control-Allow-Origin: *" );

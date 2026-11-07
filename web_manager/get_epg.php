@@ -1,5 +1,6 @@
 <?php
 require_once( "catchup.php" );
+require_once( "channel_groups.php" );
 
 $sort = isset( $_REQUEST[ "sort" ] ) ? ( int )$_REQUEST[ "sort" ] : -1;
 $id = isset( $_REQUEST[ "id" ] ) ? ( int )$_REQUEST[ "id" ] : -1;
@@ -260,6 +261,11 @@ if ( $tables_exist == 4 )
 $db->close();
 
 $json_array[ "data" ][ "values" ] = $program_array;
+
+if ( $tables_exist == 4 )
+{
+	AddChannelGroupNames( $channels_file_path, $json_array[ "data" ][ "values" ] );
+}
 
 header( "Access-Control-Allow-Origin: *" );
 echo json_encode( $json_array, JSON_UNESCAPED_SLASHES );
