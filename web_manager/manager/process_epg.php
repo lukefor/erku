@@ -6,7 +6,7 @@ $start_time = microtime( true );
 $total_items_added = 0;
 $total_items = 0;
 
-$time_zone = "America/Los_Angeles";
+$time_zone = "Europe/London";	// Only used to convert the EPG times. The stored times are UTC.
 $date = new DateTime();
 $current_time = $date->getTimestamp();
 

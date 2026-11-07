@@ -12,7 +12,7 @@ $search_query = isset( $_REQUEST[ "query" ] ) ? $_REQUEST[ "query" ] : "";
 
 $json_array = [ "data" => array( "total" => 0, "id" => -1, "name" => "", "time_zone_offset" => 0, "values" => [] ) ];
 
-$time_zone = "";
+$time_zone = "Europe/London";	// The time zone of the program times sent to the client. Should match the Roku device's time zone.
 
 $tz = new DateTimeZone( $time_zone );
 $time_zone_offset = $tz->getOffset( new DateTime( "now", $tz ) );
