@@ -237,10 +237,22 @@ function Catchup_FormatUrl( template as string, start_utc as integer, end_utc as
 '}
 end function
 
-' Creates a ChannelContentNode that plays the channel's program from the beginning.
+' Returns the URL that plays a channel's program, starting offset seconds after the program begins.
+' channel can be a ChannelContentNode of a channel or catch-up program. program is an EPGContentNode.
+function Catchup_GetProgramUrl( channel as object, program as object, offset as integer ) as string
+'{
+	' Program times are offset by the time zone. Convert them back to UTC and apply the provider's correction.
+	start_utc = program.start_time + offset - channel.TimeZoneOffset + channel.CatchupCorrection
+	end_utc = program.end_time - channel.TimeZoneOffset + channel.CatchupCorrection
+
+	return Catchup_FormatUrl( channel.CatchupSource, start_utc, end_utc, Catchup_GetUTCTime(), channel.TimeZoneOffset )
+'}
+end function
+
+' Creates a ChannelContentNode that plays the channel's program from its beginning, or offset seconds after it.
 ' program_index is the index of the channel's EPGContentNode child.
 ' Returns invalid if the program can't be played.
-function Catchup_CreateContent( channel as object, program_index as integer, allow_current as boolean ) as dynamic
+function Catchup_CreateContent( channel as object, program_index as integer, allow_current as boolean, offset = 0 as integer ) as dynamic
 '{
 	if channel = invalid or program_index < 0 or program_index >= channel.GetChildCount()
 	'{
@@ -256,11 +268,11 @@ function Catchup_CreateContent( channel as object, program_index as integer, all
 	'}
 	end if
 
-	now_utc = Catchup_GetUTCTime()
-
-	' Program times are offset by the time zone. Convert them back to UTC and apply the provider's correction.
-	start_utc = program.start_time - channel.TimeZoneOffset + channel.CatchupCorrection
-	end_utc = program.end_time - channel.TimeZoneOffset + channel.CatchupCorrection
+	if offset < 0
+	'{
+		offset = 0
+	'}
+	end if
 
 	content = CreateObject( "roSGNode", "ChannelContentNode" )
 	content.channel_id = channel.channel_id
@@ -277,7 +289,8 @@ function Catchup_CreateContent( channel as object, program_index as integer, all
 	content.TimeZoneOffset = channel.TimeZoneOffset
 
 	content.IsCatchup = true
-	content.Url = Catchup_FormatUrl( channel.CatchupSource, start_utc, end_utc, now_utc, channel.TimeZoneOffset )
+	content.Url = Catchup_GetProgramUrl( channel, program, offset )
+	content.CatchupStreamStart = program.start_time + offset
 	if channel.CatchupStreamFormat <> ""
 	'{
 		content.StreamFormat = channel.CatchupStreamFormat

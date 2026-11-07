@@ -6,6 +6,9 @@
 		<field id="video" type="node" value="invalid" />
 		<field id="resume" type="bool" value="false" onChange="OnResume" />
 		<field id="details_content" type="node" value="invalid" onChange="OnDetailsContentChange" alwaysnotify="true" />
+		<field id="ffrw_key" type="string" value="" onChange="OnFastForwardRewindKey" alwaysnotify="true" />	<!-- "fastforward" or "rewind" starts seeking, "" stops. -->
+		<field id="catchup_seek" type="integer" value="0" alwaysnotify="true" />	<!-- Set to the position (from the beginning of the program) to play a catch-up program from. -->
 	</interface>
 	<script type="text/brightscript" uri="pkg:/components/screens/VideoPlayer/VideoInfo/VideoInfo.brs" />
+	<script type="text/brightscript" uri="pkg:/components/utils/Catchup.brs" />
 </component>

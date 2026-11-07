@@ -26,5 +26,6 @@
 		<field id="CatchupCorrection" type="integer" value="0" />	<!-- In seconds. -->
 		<field id="TimeZoneOffset" type="integer" value="0" />	<!-- The offset (in seconds) that's been applied to the EPG program times. -->
 		<field id="IsCatchup" type="bool" value="false" />	<!-- The content plays an archived program (its only child). -->
+		<field id="CatchupStreamStart" type="integer" value="0" />	<!-- The program time (in the EPG's time format) at the beginning of the catch-up stream. -->
 	</interface>
 </component>

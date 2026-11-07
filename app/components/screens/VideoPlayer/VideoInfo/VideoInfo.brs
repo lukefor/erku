@@ -229,6 +229,14 @@ sub Init()
 
 	''''''''''''''''''''''''
 
+	m.seek_info = { "type": 0, "position": 0, "duration": 0, "max": 0 }
+
+	' Seeks to the selected position shortly after the fast forward/rewind keys are released.
+	m.commit_seek_timer = CreateObject( "roSGNode", "Timer" )
+	m.commit_seek_timer.repeat = false
+	m.commit_seek_timer.duration = 1.5
+	m.commit_seek_timer.ObserveField( "fire", "CommitSeek" )
+
 	m.current_content_type = -1
 
 	m.video_format_map = { "hevc": "H.265",
@@ -294,6 +302,244 @@ sub OnDetailsContentChange()
 '}
 end sub
 
+' Returns how the playing video can be seeked.
+' type: 0 = can't seek, 1 = seek the video, 2 = a catch-up program, 3 = Live TV that can be rewound using catch-up.
+' position, duration, and max (the furthest position that can be seeked to) are in seconds.
+' For catch-up programs and Live TV, the values are relative to the beginning of the program.
+function GetSeekInfo() as object
+'{
+	info = { "type": 0, "position": 0, "duration": 0, "max": 0 }
+
+	content = m.top.content
+	video = m.top.video
+
+	if content = invalid or video = invalid
+	'{
+		return info
+	'}
+	end if
+
+	if content.IsCatchup = true and content.GetChildCount() > 0
+	'{
+		program = content.GetChild( 0 )
+
+		' A program that's still airing can only be seeked up to the current time.
+		available_end_time = program.end_time
+		current_time = Catchup_GetLocalTime()
+		if available_end_time > current_time
+		'{
+			available_end_time = current_time
+		'}
+		end if
+
+		info.type = 2
+		info.duration = program.end_time - program.start_time
+		info.max = available_end_time - program.start_time
+		info.position = ( content.CatchupStreamStart - program.start_time ) + Int( video.position )
+		if info.position > info.duration
+		'{
+			info.position = info.duration
+		'}
+		end if
+	'}
+	else if content.IsCatchup = false and content.CatchupSource <> ""
+	'{
+		program_index = Catchup_GetCurrentProgramIndex( content )
+		if program_index <> -1
+		'{
+			program = content.GetChild( program_index )
+			if Catchup_IsAvailable( content, program.start_time, program.end_time, true )
+			'{
+				info.type = 3
+				info.duration = program.end_time - program.start_time
+				info.max = Catchup_GetLocalTime() - program.start_time
+				info.position = info.max	' We're at the live position.
+			'}
+			end if
+		'}
+		end if
+	'}
+	end if
+
+	if info.type = 0 and video.duration > 0
+	'{
+		info.type = 1
+		info.duration = Int( video.duration )
+		info.max = info.duration
+		info.position = Int( video.position )
+	'}
+	end if
+
+	return info
+'}
+end function
+
+sub UpdateSeekProgress()
+'{
+	if m.seek_info.duration > 0 and m.progress.width > 0
+	'{
+		m.progress_step.width = Int( m.seek_position / m.seek_info.duration * m.progress.width )
+
+		m.progress_position_info.text = GetHMS( m.seek_position )
+		m.progress_duration_info.text = GetHMS( m.seek_info.duration )
+	'}
+	end if
+'}
+end sub
+
+' Starts seeking forward (key = "fastforward") or backward (key = "rewind").
+sub StartFastForwardRewind( key as string )
+'{
+	m.commit_seek_timer.control = "stop"
+
+	if m.seek = false
+	'{
+		m.seek_info = GetSeekInfo()
+		m.seek_position = m.seek_info.position
+	'}
+	end if
+
+	if m.seek_info.type = 0
+	'{
+		return
+	'}
+	end if
+
+	if key = "fastforward"
+	'{
+		m.ffrw_type = 1
+
+		m.progress_fast_forward.text = "<icon_selected>" + chr( 59659 ) + "</icon_selected>"	' Fast Forward
+	'}
+	else' if key = "rewind"
+	'{
+		m.ffrw_type = 2
+
+		m.progress_rewind.text = "<icon_selected>" + chr( 59658 ) + "</icon_selected>"	' Rewind
+	'}
+	end if
+
+	HandleFastForwardRewind()
+
+	m.ffrw_timer.control = "start"
+'}
+end sub
+
+' Stops seeking. The position is seeked to once the commit timer fires, or when OK/play is pressed.
+sub StopFastForwardRewind()
+'{
+	if m.ffrw_type = 1	' Fast Forward
+	'{
+		m.progress_fast_forward.text = "<icon>" + chr( 59659 ) + "</icon>"	' Fast Forward
+	'}
+	else if m.ffrw_type = 2	' Rewind
+	'{
+		m.progress_rewind.text = "<icon>" + chr( 59658 ) + "</icon>"	' Rewind
+	'}
+	end if
+
+	m.ffrw_type = 0
+
+	m.long_ffrw = 0
+	m.ffrw_timer.duration = m.ffrw_speed
+
+	m.ffrw_timer.control = "stop"
+
+	if m.seek = true
+	'{
+		m.commit_seek_timer.control = "start"
+	'}
+	end if
+'}
+end sub
+
+' The video player forwards the fast forward/rewind keys that opened the video info menu.
+sub OnFastForwardRewindKey()
+'{
+	if m.top.ffrw_key = "fastforward" or m.top.ffrw_key = "rewind"
+	'{
+		StartFastForwardRewind( m.top.ffrw_key )
+	'}
+	else
+	'{
+		StopFastForwardRewind()
+	'}
+	end if
+'}
+end sub
+
+' Seeks to the selected position.
+sub CommitSeek()
+'{
+	m.commit_seek_timer.control = "stop"
+
+	if m.seek = false or m.top.video = invalid
+	'{
+		return
+	'}
+	end if
+
+	position = m.seek_position
+
+	m.seek_position = 0
+	m.seek = false
+
+	native_seek = false
+
+	if m.seek_info.type = 2	' A catch-up program.
+	'{
+		program = m.top.content.GetChild( 0 )
+
+		' Seek within the stream if it's possible. Otherwise request the program starting at the new position.
+		stream_position = position - ( m.top.content.CatchupStreamStart - program.start_time )
+		if m.top.video.duration > 0 and stream_position >= 0 and stream_position <= m.top.video.duration - 5
+		'{
+			native_seek = true
+			position = stream_position
+		'}
+		else
+		'{
+			m.top.catchup_seek = position
+		'}
+		end if
+	'}
+	else if m.seek_info.type = 3	' Live TV
+	'{
+		' Stay live if we're close enough to the live position.
+		if position < m.seek_info.max - 30
+		'{
+			m.top.catchup_seek = position
+		'}
+		end if
+	'}
+	else if m.seek_info.type = 1
+	'{
+		native_seek = true
+	'}
+	end if
+
+	if native_seek = true
+	'{
+		m.top.video.seek = position
+
+		if m.top.video.state <> "playing" and m.top.video.state <> "paused"
+		'{
+			m.top.video.control = "play"
+		'}
+		end if
+	'}
+	end if
+
+	if m.top.video.state <> "paused"
+	'{
+		m.progress_play_pause_stop.text = "<icon>" + chr( 59657 ) + "</icon>"	' Pause
+	'}
+	end if
+
+	UpdateProgressAndTime()
+'}
+end sub
+
 sub HandleFastForwardRewind()
 '{
 	if m.top.video <> invalid and m.ffrw_type <> 0
@@ -315,9 +561,14 @@ sub HandleFastForwardRewind()
 		'}
 		end if
 
-		seek_position = 1
+		' The first press skips 10 seconds. Holding the key down speeds it up.
+		seek_position = 10
 
-		if m.long_ffrw >= 200 and m.long_ffrw < 400
+		if m.long_ffrw > 1 and m.long_ffrw < 200
+		'{
+			seek_position = 1
+		'}
+		else if m.long_ffrw >= 200 and m.long_ffrw < 400
 		'{
 			seek_position = 5
 		'}
@@ -335,9 +586,9 @@ sub HandleFastForwardRewind()
 		'{
 			m.seek_position = m.seek_position + seek_position
 
-			if m.seek_position > m.top.video.duration
+			if m.seek_position > m.seek_info.max
 			'{
-				m.seek_position = m.top.video.duration
+				m.seek_position = m.seek_info.max
 			'}
 			end if
 		'}
@@ -353,15 +604,9 @@ sub HandleFastForwardRewind()
 		'}
 		end if
 
-		if m.top.video.duration > 0 and m.progress.width > 0
-		'{
-			m.progress_step.width = Int( m.seek_position / m.top.video.duration * m.progress.width )
-
-			m.progress_position_info.text = GetHMS( m.seek_position )
-		'}
-		end if
-
 		m.seek = true
+
+		UpdateSeekProgress()
 	'}
 	end if
 '}
@@ -695,8 +940,12 @@ sub OnVisible()
 	'{
 		m.update_timer.control = "stop"
 
+		' Cancel any seeking.
 		m.seek_position = 0
 		m.seek = false
+
+		StopFastForwardRewind()
+		m.commit_seek_timer.control = "stop"
 	'}
 	end if
 '}
@@ -746,13 +995,18 @@ sub UpdateProgressAndTime()
 	'}
 	end if
 
-	if m.top.video <> invalid and m.top.video.state <> "buffering" and m.top.video.duration > 0 and m.progress.width > 0' and m.ffrw_type = 0 and m.seek = false
+	if m.seek = true
 	'{
-		if m.seek = false
+		UpdateSeekProgress()
+	'}
+	else if m.top.video <> invalid and m.top.video.state <> "buffering"
+	'{
+		info = GetSeekInfo()
+		if info.duration > 0 and m.progress.width > 0
 		'{
-			if m.top.video.position <= m.top.video.duration
+			if info.position <= info.duration
 			'{
-				m.progress_step.width = Int( m.top.video.position / m.top.video.duration * m.progress.width )
+				m.progress_step.width = Int( info.position / info.duration * m.progress.width )
 			'}
 			else
 			'{
@@ -760,17 +1014,10 @@ sub UpdateProgressAndTime()
 			'}
 			end if
 
-			m.progress_position_info.text = GetHMS( m.top.video.position )
-		'}
-		else
-		'{
-			m.progress_step.width = Int( m.seek_position / m.top.video.duration * m.progress.width )
-		
-			m.progress_position_info.text = GetHMS( m.seek_position )
+			m.progress_position_info.text = GetHMS( info.position )
+			m.progress_duration_info.text = GetHMS( info.duration )
 		'}
 		end if
-
-		m.progress_duration_info.text = GetHMS( m.top.video.duration )
 	'}
 	end if
 '}
@@ -785,7 +1032,13 @@ sub OnResume()
 		' The video errored and we're resuming.
 		if m.top.video <> invalid and m.top.video.state <> "playing" and m.top.video.state <> "paused"
 		'{
-			m.seek_position = Int( m.top.video.position )
+			m.seek_info = { "type": 1, "position": Int( m.top.video.position ), "duration": Int( m.top.video.duration ), "max": Int( m.top.video.duration ) }
+			if m.seek_info.max < m.seek_info.position
+			'{
+				m.seek_info.max = m.seek_info.position
+			'}
+			end if
+			m.seek_position = m.seek_info.position
 			m.seek = true
 		'}
 		end if
@@ -804,32 +1057,17 @@ function OnKeyEvent( key as string, press as boolean ) as boolean
 		'}
 		else if key = "OK"
 		'{
-			if m.top.video <> invalid
-			'{
-				if m.seek = true
-				'{
-					m.top.video.seek = m.seek_position
-
-					m.seek_position = 0
-					m.seek = false
-
-					if m.top.video.state <> "playing" and m.top.video.state <> "paused"
-					'{
-						m.top.video.control = "play"
-
-						m.progress_play_pause_stop.text = "<icon>" + chr( 59657 ) + "</icon>"	' Pause
-					'}
-					end if
-				'}
-				end if
-			'}
-			end if
+			CommitSeek()
 		'}
 		else if key = "play"
 		'{
 			if m.top.video <> invalid
 			'{
-				if m.top.video.state = "playing"
+				if m.seek = true
+				'{
+					CommitSeek()
+				'}
+				else if m.top.video.state = "playing"
 				'{
 					m.top.video.control = "pause"
 
@@ -843,16 +1081,11 @@ function OnKeyEvent( key as string, press as boolean ) as boolean
 				'}
 				else
 				'{
-					if m.seek = false
-					'{
-						m.seek_position = Int( m.top.video.position )
-					'}
-					end if
+					m.seek_info = GetSeekInfo()
+					m.seek_position = m.seek_info.position
+					m.seek = true
 
-					m.top.video.seek = m.seek_position
-
-					m.seek_position = 0
-					m.seek = false
+					CommitSeek()
 
 					m.top.video.control = "play"
 
@@ -864,54 +1097,39 @@ function OnKeyEvent( key as string, press as boolean ) as boolean
 		'}
 		else if key = "fastforward" or key = "rewind"
 		'{
-			if m.seek = false
-			'{
-				m.seek_position = Int( m.top.video.position )
-			'}
-			end if
-
-			if key = "fastforward"
-			'{
-				m.ffrw_type = 1
-
-				m.progress_fast_forward.text = "<icon_selected>" + chr( 59659 ) + "</icon_selected>"	' Fast Forward
-			'}
-			else' if key = "rewind"
-			'{
-				m.ffrw_type = 2
-
-				m.progress_rewind.text = "<icon_selected>" + chr( 59658 ) + "</icon_selected>"	' Rewind
-			'}
-			end if
-
-			HandleFastForwardRewind()
-
-			m.ffrw_timer.control = "start"
+			StartFastForwardRewind( key )
 		'}
 		else if key = "replay"
 		'{
 			if m.top.video <> invalid
 			'{
-				' Toggle between setting the seek position from the beginning and end of the video.
-				if m.seek = true and m.seek_position = 0
+				if m.seek = false
 				'{
-					m.seek_position = Int( m.top.video.duration )
-				'}
-				else
-				'{
-					m.seek_position = 0
+					m.seek_info = GetSeekInfo()
+					m.seek_position = m.seek_info.position
 				'}
 				end if
 
-				if m.top.video.duration > 0 and m.progress.width > 0
+				if m.seek_info.type <> 0
 				'{
-					m.progress_step.width = Int( m.seek_position / m.top.video.duration * m.progress.width )
-		
-					m.progress_position_info.text = GetHMS( m.seek_position )
+					' Toggle between setting the seek position from the beginning and end of the video.
+					if m.seek = true and m.seek_position = 0
+					'{
+						m.seek_position = m.seek_info.max
+					'}
+					else
+					'{
+						m.seek_position = 0
+					'}
+					end if
+
+					m.seek = true
+
+					UpdateSeekProgress()
+
+					m.commit_seek_timer.control = "start"
 				'}
 				end if
-		
-				m.seek = true
 			'}
 			end if
 		'}
@@ -921,26 +1139,7 @@ function OnKeyEvent( key as string, press as boolean ) as boolean
 	'{
 		if key = "fastforward" or key = "rewind"
 		'{
-			if m.top.video <> invalid
-			'{
-				if m.ffrw_type = 1	' Fast Forward
-				'{
-					m.progress_fast_forward.text = "<icon>" + chr( 59659 ) + "</icon>"	' Fast Forward
-				'}
-				else' if m.ffrw_type = 2	' Rewind
-				'{
-					m.progress_rewind.text = "<icon>" + chr( 59658 ) + "</icon>"	' Rewind
-				'}
-				end if
-			'}
-			end if
-
-			m.ffrw_type = 0
-
-			m.long_ffrw = 0
-			m.ffrw_timer.duration = m.ffrw_speed
-
-			m.ffrw_timer.control = "stop"
+			StopFastForwardRewind()
 		'}
 		end if
 	'}

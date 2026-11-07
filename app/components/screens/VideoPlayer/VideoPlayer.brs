@@ -30,6 +30,7 @@ sub Init()
 	m.video_options = m.top.FindNode( "VideoOptions" )
 
 	m.video_info.ObserveField( "menu_state", "OnVideoInfoStateChanged" )
+	m.video_info.ObserveField( "catchup_seek", "OnCatchupSeek" )
 	m.video_options.ObserveField( "menu_state", "OnVideoOptionsStateChanged" )
 
 	m.video.ObserveField( "state", "OnVideoStateChange" )
@@ -359,6 +360,42 @@ sub OnVideoOptionsStateChanged()
 '}
 end sub
 
+' Plays the catch-up program (or the Live TV program that's airing) from a new position.
+' This is used when the stream can't be seeked.
+sub OnCatchupSeek()
+'{
+	content = m.top.content
+	offset = m.video_info.catchup_seek
+
+	if content = invalid
+	'{
+		return
+	'}
+	end if
+
+	if content.IsCatchup = true and content.GetChildCount() > 0
+	'{
+		program = content.GetChild( 0 )
+
+		content.CatchupStreamStart = program.start_time + offset
+
+		m.video.content.Url = Catchup_GetProgramUrl( content, program, offset )
+		m.video.control = "play"
+	'}
+	else
+	'{
+		' Rewinding Live TV.
+		catchup_content = Catchup_CreateContent( content, Catchup_GetCurrentProgramIndex( content ), true, offset )
+		if catchup_content <> invalid
+		'{
+			m.top.catchup_content = catchup_content
+		'}
+		end if
+	'}
+	end if
+'}
+end sub
+
 sub OnResume()
 '{
 	if m.top.resume = true
@@ -376,9 +413,18 @@ function OnKeyEvent( key as string, press as boolean ) as boolean
 '{
 	if press
 	'{
-		if key = "down" or key = "fastforward" or key = "rewind"
+		if key = "down"
 		'{
 			m.video_info.menu_state = 1	' Show
+
+			return true
+		'}
+		else if key = "fastforward" or key = "rewind"
+		'{
+			m.video_info.menu_state = 1	' Show
+
+			' Start seeking right away instead of waiting for another key press.
+			m.video_info.ffrw_key = key
 
 			return true
 		'}
@@ -442,6 +488,17 @@ function OnKeyEvent( key as string, press as boolean ) as boolean
 				end if
 			'}
 			end if
+		'}
+		end if
+	'}
+	else
+	'{
+		' The video info menu normally receives the release since it has the focus, but make sure seeking stops.
+		if key = "fastforward" or key = "rewind"
+		'{
+			m.video_info.ffrw_key = ""
+
+			return true
 		'}
 		end if
 	'}
