@@ -1,4 +1,6 @@
 <?php
+require_once( "catchup.php" );
+
 $type = isset( $_REQUEST[ "type" ] ) ? ( int )$_REQUEST[ "type" ] : -1;
 
 $limit = isset( $_REQUEST[ "limit" ] ) ? ( int )$_REQUEST[ "limit" ] : 0;
@@ -163,7 +165,7 @@ if ( $type == 0 )	// Live TV
                                                                       "url" => $row[ "url" ],
                                                                       "logo_url" => $row[ "logo_url" ],
                                                                       "headers" => $headers,
-                                                                      "favorite" => $row[ "favorite" ] ) );
+                                                                      "favorite" => $row[ "favorite" ] ) + GetChannelCatchupInfo( $row ) );
             }
         }
     }

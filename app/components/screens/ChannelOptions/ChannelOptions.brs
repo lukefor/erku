@@ -96,6 +96,42 @@ sub Init()
 
 	m.options_columns.AppendChild( m.add_remove_favorites_selected )
 
+		' Catch-up
+		m.catchup_icon = CreateObject( "roSGNode", "MultiStyleLabel" )
+		m.catchup_icon.height = label_height
+		m.catchup_icon.translation = [ 20, 20 ]
+		m.catchup_icon.vertAlign = "center"
+		m.catchup_icon.drawingStyles = m.drawing_styles
+		m.catchup_icon.text = "<icon>" + chr( 59656 ) + "</icon>"	' Play
+
+	m.options_columns.AppendChild( m.catchup_icon )
+
+		m.catchup_background = CreateObject( "roSGNode", "Rectangle" )
+		m.catchup_background.height = label_height
+		m.catchup_background.color = m.button_background_color
+
+	m.options_columns.AppendChild( m.catchup_background )
+
+		m.catchup_selected = CreateObject( "roSGNode", "Rectangle" )
+		m.catchup_selected.height = label_height
+		m.catchup_selected.color = m.button_selected_color
+
+			m.catchup = CreateObject( "roSGNode", "MultiStyleLabel" )
+			m.catchup.height = label_height
+			m.catchup.translation = [ 20, 0 ]
+			m.catchup.vertAlign = "center"
+			m.catchup.drawingStyles = m.drawing_styles
+			m.catchup.text = "Play from Start"
+			m.catchup_selected.AppendChild( m.catchup )
+
+		m.catchup_selected.width = m.catchup.boundingRect()[ "width" ] + 40
+		m.catchup_background.width = m.catchup_selected.width
+
+	m.options_columns.AppendChild( m.catchup_selected )
+
+	m.label_height = label_height
+	m.selected_option = 0	' 0 = Add/Remove Favorite, 1 = Play from Start
+
 	m.container.AppendChild( m.options_columns )
 
 	
@@ -112,6 +148,51 @@ sub Init()
 	m.top.ObserveField( "visible", "OnVisible" )
 
 	m.saving_favorite = false
+'}
+end sub
+
+' Positions the options and highlights the selected one. The catch-up option is only shown if there's a program that can be played.
+sub UpdateOptions()
+'{
+	show_catchup = ( m.top.content <> invalid and m.top.catchup_content <> invalid )
+
+	if show_catchup = false
+	'{
+		m.selected_option = 0
+	'}
+	end if
+
+	m.catchup_icon.visible = show_catchup
+	m.catchup_background.visible = show_catchup
+	m.catchup_selected.visible = show_catchup
+
+	favorites_y = 20
+	if show_catchup = true
+	'{
+		' Play from Start is listed first.
+		favorites_y = 20 + m.label_height + 20
+
+		m.catchup_icon.translation = [ 20, 20 ]
+		m.catchup_background.translation = [ 20 + m.catchup_icon.boundingRect()[ "width" ] + 20, 20 ]
+		m.catchup_selected.translation = m.catchup_background.translation
+	'}
+	end if
+
+	m.favorites_icon.translation = [ 20, favorites_y ]
+	m.add_remove_favorites_background.translation = [ 20 + m.favorites_icon.boundingRect()[ "width" ] + 20, favorites_y ]
+	m.add_remove_favorites_selected.translation = m.add_remove_favorites_background.translation
+
+	if m.selected_option = 1
+	'{
+		m.catchup_selected.color = m.button_selected_color
+		m.add_remove_favorites_selected.color = "0x00000000"
+	'}
+	else
+	'{
+		m.catchup_selected.color = "0x00000000"
+		m.add_remove_favorites_selected.color = m.button_selected_color
+	'}
+	end if
 '}
 end sub
 
@@ -165,6 +246,19 @@ sub OnVisible()
 			m.add_remove_favorites_background.width = m.add_remove_favorites_selected.width
 		'}
 		end if
+
+		' Default to Play from Start if it's available.
+		if m.top.catchup_content <> invalid
+		'{
+			m.selected_option = 1
+		'}
+		else
+		'{
+			m.selected_option = 0
+		'}
+		end if
+
+		UpdateOptions()
 	'}
 	else
 	'{
@@ -178,7 +272,35 @@ function OnKeyEvent( key as string, press as boolean ) as boolean
 '{
 	if press
 	'{
-		if key = "OK"
+		if key = "up" or key = "down"
+		'{
+			if m.top.catchup_content <> invalid
+			'{
+				if key = "up"
+				'{
+					m.selected_option = 1
+				'}
+				else
+				'{
+					m.selected_option = 0
+				'}
+				end if
+
+				UpdateOptions()
+			'}
+			end if
+		'}
+		else if key = "OK" and m.selected_option = 1
+		'{
+			if m.top.catchup_content <> invalid and m.saving_favorite = false
+			'{
+				m.top.catchup_selected = true
+
+				m.top.menu_state = 0	' Hide
+			'}
+			end if
+		'}
+		else if key = "OK"
 		'{
 			if m.top.content <> invalid
 			'{

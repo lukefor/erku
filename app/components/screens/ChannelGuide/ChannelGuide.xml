@@ -4,6 +4,7 @@
 		<field id="menu_state" type="integer" value="-1" alwaysnotify="true" />
 		<field id="content" type="node" value="invalid" onChange="OnContentChange" alwaysnotify="true" />
 		<field id="content_index" type="integer" value="-1" alwaysnotify="true" />
+		<field id="catchup_content" type="node" value="invalid" alwaysnotify="true" />	<!-- Set to a program that should be played using catch-up. -->
 		<field id="video_player" type="node" value="invalid" />
 		<field id="content_offset" type="integer" value="-1" />
 		<field id="update_content" type="bool" value="false" />
@@ -11,4 +12,5 @@
 		<field id="reload_content" type="bool" value="false" onChange="OnReloadConent" />
 	</interface>
 	<script type="text/brightscript" uri="pkg:/components/screens/ChannelGuide/ChannelGuide.brs" />
+	<script type="text/brightscript" uri="pkg:/components/utils/Catchup.brs" />
 </component>

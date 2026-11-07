@@ -1,4 +1,6 @@
 <?php
+require_once( "../catchup.php" );
+
 $start_time = microtime( true );
 
 $total_items_added = 0;
@@ -17,6 +19,9 @@ $channels_file_path = $database_path . "channels.db";
 $epg_file_path = $database_path . "epg.xml";
 
 $db_channels = new SQLite3( $channels_file_path );
+
+// Programs that have ended are kept for as long as they can be watched using catch-up.
+$retention_time = $current_time - ( GetMaxCatchupDays( $db_channels ) * 86400 );
 
 // Does our guide id map exist?
 $query = "SELECT name FROM sqlite_master WHERE type='table' AND name='guide_id'";
@@ -41,7 +46,7 @@ $query = "SELECT name FROM sqlite_master WHERE type='table' AND name='epg'";
 $results = $db_channels->query( $query );
 if ( $arr = $results->fetchArray( SQLITE3_ASSOC ) )
 {
-	$query = "DELETE FROM [epg] WHERE stop <= " . $current_time;
+	$query = "DELETE FROM [epg] WHERE stop <= " . $retention_time;
 	$results = $db_channels->query( $query );
 }
 else
@@ -72,7 +77,7 @@ while ( @$xml->read() )
 		$date = $date->createFromFormat('YmdHis O', $stop, new DateTimeZone( "UTC" ) );
 		$date = $date->setTimeZone( new DateTimeZone( $time_zone ) );
 		$stop_ts = $date->getTimestamp();
-		if ( $stop_ts <= $current_time )
+		if ( $stop_ts <= $retention_time )
 		{
 			continue;
 		}

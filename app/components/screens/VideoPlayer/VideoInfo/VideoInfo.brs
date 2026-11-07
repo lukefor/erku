@@ -435,7 +435,30 @@ sub UpdateProgramInfo()
 		'}
 		end if
 
-		if m.current_content_type = 0	' Live TV
+		if m.current_content_type = 0 and m.top.content.IsCatchup = true	' A Live TV program that's being played using catch-up.
+		'{
+			if m.top.content.GetChildCount() > 0
+			'{
+				program = m.top.content.GetChild( 0 )
+
+				program_name_text = program.Title
+				program_description_text = program.Description
+
+				date_time.FromSeconds( program.start_time )
+				time_string = date_time.asDateStringLoc( "EEE, MMM d" ) + " • " + date_time.asTimeStringLoc( "hh:mm a" ) + " - "
+				date_time.FromSeconds( program.end_time )
+				time_string = time_string + date_time.asTimeStringLoc( "hh:mm a" ) + " • " + FormatRuntime( program.end_time - program.start_time )
+
+				release_info.Push( time_string )
+			'}
+			end if
+
+			release_info.Push( "Catch-up" )
+			release_info.Push( m.top.content.Title )
+
+			channel_number_text = m.top.content.Number.ToStr()
+		'}
+		else if m.current_content_type = 0	' Live TV
 		'{
 			last_program_index = m.top.content.GetChildCount() - 1
 
@@ -506,7 +529,16 @@ sub UpdateProgramInfo()
 
 				if remove_num_children > 0
 				'{
-					m.top.content.RemoveChildrenIndex( remove_num_children, 0 )
+					' Channels that support catch-up keep the programs that have ended so that they can be selected in the guide.
+					if m.top.content.CatchupSource = ""
+					'{
+						m.top.content.RemoveChildrenIndex( remove_num_children, 0 )
+					'}
+					else if current_program_index <> -1
+					'{
+						current_program_index = current_program_index + remove_num_children
+					'}
+					end if
 				'}
 				end if
 

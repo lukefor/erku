@@ -1,4 +1,6 @@
 <?php
+require_once( "catchup.php" );
+
 $type = isset( $_REQUEST[ "type" ] ) ? ( int )$_REQUEST[ "type" ] : -1;
 $sort = isset( $_REQUEST[ "sort" ] ) ? ( int )$_REQUEST[ "sort" ] : -1;
 $id = isset( $_REQUEST[ "id" ] ) ? ( int )$_REQUEST[ "id" ] : -1;
@@ -185,7 +187,7 @@ if ( $type == 0 )	// Live TV
 																		  "extension" => $row[ "extension" ],
 																		  "logo_url" => $row[ "logo_url" ],
 																		  "headers" => $headers,
-																		  "favorite" => $row[ "favorite" ] ) );
+																		  "favorite" => $row[ "favorite" ] ) + GetChannelCatchupInfo( $row ) );
 				}
 			}
 		}
@@ -232,7 +234,7 @@ if ( $type == 0 )	// Live TV
 																		  "extension" => $row[ "extension" ],
 																		  "logo_url" => $row[ "logo_url" ],
 																		  "headers" => $headers,
-																		  "favorite" => $row[ "favorite" ]  ) );
+																		  "favorite" => $row[ "favorite" ] ) + GetChannelCatchupInfo( $row ) );
 				}
 			}
 		}
@@ -295,7 +297,7 @@ if ( $type == 0 )	// Live TV
 																		  "extension" => $row[ "extension" ],
 																		  "logo_url" => $row[ "logo_url" ],
 																		  "headers" => $headers,
-																		  "favorite" => $row[ "favorite" ] ) );
+																		  "favorite" => $row[ "favorite" ] ) + GetChannelCatchupInfo( $row ) );
 				}
 			}
 		}
@@ -374,7 +376,7 @@ if ( $type == 0 )	// Live TV
 																			  "extension" => $row[ "extension" ],
 																			  "logo_url" => $row[ "logo_url" ],
 																			  "headers" => $headers,
-																			  "favorite" => $row[ "favorite" ] ) );
+																			  "favorite" => $row[ "favorite" ] ) + GetChannelCatchupInfo( $row ) );
 					}
 				}
 			}
@@ -1133,7 +1135,7 @@ else if ( $type == 10 )	// Live TV Channel and its group tree.
 																  "extension" => $row[ "extension" ],
 																  "logo_url" => $row[ "logo_url" ],
 																  "headers" => $headers,
-																  "favorite" => $row[ "favorite" ] ) );
+																  "favorite" => $row[ "favorite" ] ) + GetChannelCatchupInfo( $row ) );
 		}
 
 		if ( $channel_id != -1 )

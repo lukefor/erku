@@ -541,6 +541,8 @@ sub LoadContent( content_type as integer, sort_type as integer, id as integer, c
 						'}
 						end if
 
+						SetChannelCatchupInfo( node, value, GetDeviceTimeZoneOffset() )
+
 						content.AppendChild( node )
 					'}
 					end for
@@ -660,6 +662,14 @@ sub LoadEPG( sort_type as integer, id as integer, content_limit as integer, cont
 			content.Title = response.data.name
 			content.total = response.data.total
 
+			' The offset that the web manager applied to the program times.
+			time_zone_offset = GetDeviceTimeZoneOffset()
+			if response.data.time_zone_offset <> invalid
+			'{
+				time_zone_offset = response.data.time_zone_offset
+			'}
+			end if
+
 			for each channel in response.data.values
 			'{
 				channel_node = CreateObject( "roSGNode", "ChannelContentNode" )
@@ -681,6 +691,8 @@ sub LoadEPG( sort_type as integer, id as integer, content_limit as integer, cont
 					channel_node.Favorite = true
 				'}
 				end if
+
+				SetChannelCatchupInfo( channel_node, channel, time_zone_offset )
 
 				for each program in channel.programs
 				'{
@@ -833,6 +845,8 @@ sub LoadChannel( id as integer, channel_number as integer )
 				'}
 				end if
 
+				SetChannelCatchupInfo( node, value, GetDeviceTimeZoneOffset() )
+
 				content.AppendChild( node )
 
 				''''''''''''''''''''''''
@@ -902,5 +916,45 @@ sub SetFavorite( add_remove_type as integer, id as integer )
 	end if
 
 	m.global.favorite_status = favorite_status
+'}
+end sub
+
+' Returns the number of seconds the device's local time is ahead of UTC.
+function GetDeviceTimeZoneOffset() as integer
+'{
+	date_time = CreateObject( "roDateTime" )
+	utc_time = date_time.AsSeconds()
+	date_time.ToLocalTime()
+	return date_time.AsSeconds() - utc_time
+'}
+end function
+
+' Copies the catch-up values of a channel returned by the web manager to its ChannelContentNode.
+' Older web managers don't return them, and the channel won't support catch-up.
+sub SetChannelCatchupInfo( node as object, value as object, time_zone_offset as integer )
+'{
+	node.TimeZoneOffset = time_zone_offset
+
+	if value.catchup_source <> invalid and value.catchup_source <> ""
+	'{
+		node.CatchupSource = value.catchup_source
+
+		if value.catchup_extension <> invalid
+		'{
+			node.CatchupStreamFormat = value.catchup_extension
+		'}
+		end if
+		if value.catchup_days <> invalid
+		'{
+			node.CatchupDays = value.catchup_days
+		'}
+		end if
+		if value.catchup_correction <> invalid
+		'{
+			node.CatchupCorrection = value.catchup_correction
+		'}
+		end if
+	'}
+	end if
 '}
 end sub

@@ -1,4 +1,6 @@
 <?php
+require_once( "catchup.php" );
+
 $sort = isset( $_REQUEST[ "sort" ] ) ? ( int )$_REQUEST[ "sort" ] : -1;
 $id = isset( $_REQUEST[ "id" ] ) ? ( int )$_REQUEST[ "id" ] : -1;
 
@@ -7,12 +9,15 @@ $offset = isset( $_REQUEST[ "offset" ] ) ? ( int )$_REQUEST[ "offset" ] : 0;
 
 $search_query = isset( $_REQUEST[ "query" ] ) ? $_REQUEST[ "query" ] : "";
 
-$json_array = [ "data" => array( "total" => 0, "id" => -1, "name" => "", "values" => [] ) ];
+$json_array = [ "data" => array( "total" => 0, "id" => -1, "name" => "", "time_zone_offset" => 0, "values" => [] ) ];
 
 $time_zone = "";
 
 $tz = new DateTimeZone( $time_zone );
 $time_zone_offset = $tz->getOffset( new DateTime( "now", $tz ) );
+
+// Program times are offset by this value. The client uses it to get the UTC times when requesting catch-up content.
+$json_array[ "data" ][ "time_zone_offset" ] = $time_zone_offset;
 
 $database_path = "databases/";
 
@@ -109,6 +114,11 @@ $index = -1;
 $channel_array = [];
 $program_array = [];
 
+// Programs that end before this time (UTC) aren't returned. Channels that support catch-up return the programs they can play.
+// Recently ended programs are kept so that the guide can fill its current time column.
+$min_stop_array = [];
+$current_time = time() - 3600;
+
 $tables_exist = 0;
 
 // Do our tables exist?
@@ -200,6 +210,9 @@ if ( $tables_exist == 4 )
 					$name = ( $row[ "alias" ] != NULL ? $row[ "alias" ] : $row[ "name" ] );
 					$headers = ( $row[ "headers" ] != NULL ? $row[ "headers" ] : "" );
 
+					$catchup_info = GetChannelCatchupInfo( $row );
+					$min_stop_array[ $index ] = $current_time - ( $catchup_info[ "catchup_source" ] != "" ? $catchup_info[ "catchup_days" ] * 86400 : 0 );
+
 					array_push( $program_array, array( "id" => $row[ "id" ],
 													   "number" => $row[ "number" ],
 													   "name" => $name,
@@ -209,7 +222,7 @@ if ( $tables_exist == 4 )
 													   "logo_url" => $row[ "logo_url" ],
 													   "headers" => $headers,
 													   "favorite" => $row[ "favorite" ],
-													   "programs" => [] ) );
+													   "programs" => [] ) + $catchup_info );
 				}
 			}
 
@@ -218,12 +231,18 @@ if ( $tables_exist == 4 )
 			$query .= " JOIN";
 			$query .= " [epg] t2";
 			$query .= " ON t1.guide_id = t2.id";
+			$query .= " ORDER BY t2.start ASC";	// The client expects each channel's programs to be in order. Past (catch-up) programs can be added after future ones.
 
 			$results = $db->query( $query );
 
 			while ( $row = $results->fetchArray() )
 			{
 				$index = $channel_array[ $row[ "t1_id" ] ];
+
+				if ( $row[ "stop" ] <= $min_stop_array[ $index ] )
+				{
+					continue;
+				}
 
 				$row[ "start" ] += $time_zone_offset;
 				$row[ "stop" ] += $time_zone_offset;

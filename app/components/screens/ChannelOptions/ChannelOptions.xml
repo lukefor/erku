@@ -4,6 +4,8 @@
 		<field id="menu_state" type="integer" value="-1" alwaysnotify="true" />
 		<field id="content" type="node" value="invalid" />
 		<field id="add_remove_favorite_state" type="integer" value="-1" alwaysnotify="true" />
+		<field id="catchup_content" type="node" value="invalid" />	<!-- A program that can be played from its beginning. The option is hidden if invalid. -->
+		<field id="catchup_selected" type="bool" value="false" alwaysnotify="true" />
 	</interface>
 	<script type="text/brightscript" uri="pkg:/components/screens/ChannelOptions/ChannelOptions.brs" />
 </component>

@@ -1,4 +1,6 @@
 <?php
+require_once( "../catchup.php" );
+
 $start_time = microtime( true );
 
 $database_path = "../databases/";
@@ -27,8 +29,15 @@ $query = "CREATE TABLE IF NOT EXISTS [channel]( id INTEGER PRIMARY KEY, " .
                                                "extension TEXT, " .
                                                "logo_url TEXT, " .
                                                "headers TEXT, " .
-                                               "favorite INTEGER DEFAULT 0 )";
+                                               "favorite INTEGER DEFAULT 0, " .
+                                               "catchup TEXT, " .
+                                               "catchup_source TEXT, " .
+                                               "catchup_days INTEGER DEFAULT 0, " .
+                                               "catchup_correction REAL DEFAULT 0 )";
 $results = $db->query( $query );
+
+// Databases created by older versions don't have the catch-up columns.
+AddCatchupColumns( $db );
 
 $query = "CREATE TABLE IF NOT EXISTS [group_channel_map]( id INTEGER, " .
                                                          "channel_id INTEGER )";

@@ -427,6 +427,22 @@ function OnKeyEvent( key as string, press as boolean ) as boolean
 
 			return true
 		'}
+		else if key = "replay"
+		'{
+			' Restart the Live TV program that's currently airing if the channel supports catch-up.
+			if m.top.content <> invalid and m.top.content.IsCatchup = false and m.top.content.CatchupSource <> ""
+			'{
+				catchup_content = Catchup_CreateContent( m.top.content, Catchup_GetCurrentProgramIndex( m.top.content ), true )
+				if catchup_content <> invalid
+				'{
+					m.top.catchup_content = catchup_content
+
+					return true
+				'}
+				end if
+			'}
+			end if
+		'}
 		end if
 	'}
 	end if

@@ -72,6 +72,9 @@ sub Init()
 
 	m.time_bar_time_offset = 0
 
+	' How far back (in seconds, as a negative value) the guide can scroll. Past programs are only shown for channels that support catch-up.
+	m.min_time_bar_time_offset = 0
+
 	m.first_time_column_time = GetOffsetTime( m.time_bar_time_offset )
 	m.last_first_time_column_time = m.first_time_column_time
 	m.last_time = m.first_time_column_time
@@ -326,6 +329,7 @@ sub Init()
 	m.channel_options = CreateObject( "roSGNode", "ChannelOptions" )
 	m.channel_options.ObserveField( "menu_state", "OnChannelOptionsStateChanged" )
 	m.channel_options.ObserveField( "add_remove_favorite_state", "OnAddRemoveFavoriteStateChanged" )
+	m.channel_options.ObserveField( "catchup_selected", "OnChannelOptionsCatchupSelected" )
 	m.top.AppendChild( m.channel_options )
 '}
 end sub
@@ -401,6 +405,88 @@ sub OnChannelOptionsStateChanged()
 	'{
 		m.channel_options.visible = true
 		m.channel_options.SetFocus( true )
+	'}
+	end if
+'}
+end sub
+
+sub OnChannelOptionsCatchupSelected()
+'{
+	if m.channel_options.catchup_content <> invalid
+	'{
+		m.top.catchup_content = m.channel_options.catchup_content
+	'}
+	end if
+'}
+end sub
+
+' Returns the program that's selected in the program grid.
+' index is -1 if there's no program information for the selected time.
+function GetSelectedProgramInfo( content_index as integer )
+'{
+	if m.selected_program_index < m.first_column_items.Count()
+	'{
+		item = m.first_column_items[ m.selected_program_index ]
+
+		return { "index": item.index, "start_time": item.start_time, "end_time": item.end_time }
+	'}
+	end if
+
+	program_info_state = GetClosestProgramInfo( content_index )
+
+	return { "index": program_info_state.index_offset, "start_time": program_info_state.start_time, "end_time": program_info_state.end_time }
+'}
+end function
+
+' Returns the content needed to play the selected program using catch-up, or invalid if it can't be played.
+' Programs that are currently airing can only be played (from their beginning) if allow_current is true.
+function GetSelectedCatchupContent( allow_current as boolean ) as dynamic
+'{
+	if m.channel_list_selected = true or m.top.content = invalid or m.top.content.GetChildCount() = 0
+	'{
+		return invalid
+	'}
+	end if
+
+	content_index = GetContentIndex( m.content_index )
+	if content_index = -1
+	'{
+		return invalid
+	'}
+	end if
+
+	program_info = GetSelectedProgramInfo( content_index )
+
+	return Catchup_CreateContent( m.top.content.GetChild( content_index ), program_info.index, allow_current )
+'}
+end function
+
+' Sets how far back the guide can scroll based on the channel with the most catch-up days.
+sub UpdateMinTimeBarTimeOffset()
+'{
+	max_catchup_days = 0
+
+	if m.top.content <> invalid
+	'{
+		for i = 0 to m.top.content.GetChildCount() - 1
+		'{
+			channel = m.top.content.GetChild( i )
+			if channel.CatchupSource <> "" and channel.CatchupDays > max_catchup_days
+			'{
+				max_catchup_days = channel.CatchupDays
+			'}
+			end if
+		'}
+		end for
+	'}
+	end if
+
+	' 86400 is a multiple of the column time interval.
+	m.min_time_bar_time_offset = -( max_catchup_days * 86400 )
+
+	if m.time_bar_time_offset < m.min_time_bar_time_offset
+	'{
+		m.time_bar_time_offset = m.min_time_bar_time_offset
 	'}
 	end if
 '}
@@ -537,10 +623,24 @@ sub UpdateTimeBar()
 
 		' Adjust the time bar time offset back however many columns have elapsed since we last updated.
 		' m.first_time_column_time and m.last_first_time_column_time will be in intervals of m.column_time_interval
-		m.time_bar_time_offset = m.time_bar_time_offset - ( m.first_time_column_time - m.last_first_time_column_time )
-		if m.time_bar_time_offset < 0
+		' Keep following the current time if that's what's being displayed. Past (catch-up) times keep displaying the same time.
+		if m.time_bar_time_offset > 0
 		'{
-			m.time_bar_time_offset = 0
+			m.time_bar_time_offset = m.time_bar_time_offset - ( m.first_time_column_time - m.last_first_time_column_time )
+			if m.time_bar_time_offset < 0
+			'{
+				m.time_bar_time_offset = 0
+			'}
+			end if
+		'}
+		else if m.time_bar_time_offset < 0
+		'{
+			m.time_bar_time_offset = m.time_bar_time_offset - ( m.first_time_column_time - m.last_first_time_column_time )
+			if m.time_bar_time_offset < m.min_time_bar_time_offset
+			'{
+				m.time_bar_time_offset = m.min_time_bar_time_offset
+			'}
+			end if
 		'}
 		end if
 
@@ -587,9 +687,16 @@ sub UpdateTimeBar()
 	'}
 	end if
 
-	if m.time_bar_time_offset = 0
+	if m.time_bar_time_offset <= 0
 	'{
-		m.time_progress_bar.width = Int( ( m.time_bar_column_width * ( current_time - time ) ) / m.column_time_interval )
+		' When viewing past (catch-up) times, the progress bar shades everything up to the current time.
+		progress_width = Int( ( m.time_bar_column_width * ( current_time - time ) ) / m.column_time_interval )
+		if progress_width > m.programs.width
+		'{
+			progress_width = m.programs.width
+		'}
+		end if
+		m.time_progress_bar.width = progress_width
 		m.time_progress_bar.visible = true
 	'}
 	else
@@ -636,10 +743,27 @@ function GetClosestProgramInfo( content_index as integer )
 		'{
 			remove_num_children = 0
 
+			' Programs that have ended are kept for as long as they can be watched using catch-up.
+			remove_end_time = m.first_time_column_time
+			channel = m.top.content.GetChild( content_index )
+			if channel.CatchupSource <> ""
+			'{
+				if channel.CatchupDays > 0
+				'{
+					remove_end_time = m.first_time_column_time - ( channel.CatchupDays * 86400 )
+				'}
+				else
+				'{
+					remove_end_time = 0
+				'}
+				end if
+			'}
+			end if
+
 			for i = 0 to last_program_index
 			'{
 				' Remove programs that have ended.
-				if m.first_time_column_time >= m.top.content.GetChild( content_index ).GetChild( i ).end_time
+				if remove_end_time >= m.top.content.GetChild( content_index ).GetChild( i ).end_time
 				'{
 					remove_num_children++
 				'}
@@ -725,7 +849,13 @@ function GetClosestProgramInfo( content_index as integer )
 						'}
 						else
 						'{
+							' Use the column start time if we're viewing past (catch-up) times.
 							program_info_state.start_time = GetOffsetTime( 0 )
+							if program_info_state.start_time > column_start_time
+							'{
+								program_info_state.start_time = column_start_time
+							'}
+							end if
 						'}
 						end if
 
@@ -984,6 +1114,13 @@ sub UpdateProgramInfo( content_index as integer, program_index as integer, start
 				time_string = date.asTimeStringLoc( "hh:mm a" ) + " - "
 				date.FromSeconds( end_time )
 				time_string = time_string + date.asTimeStringLoc( "hh:mm a" ) + " • " + FormatRuntime( end_time - start_time ) + " • "
+
+				' The program can be watched from its beginning.
+				if program_index <> -1 and Catchup_IsAvailable( m.top.content.GetChild( content_index ), start_time, end_time, true )
+				'{
+					time_string = time_string + "Catch-up • "
+				'}
+				end if
 			'}
 			end if
 			m.channel_name.text = time_string + m.top.content.GetChild( content_index ).Title
@@ -1081,6 +1218,8 @@ sub OnContentChange()
 			end if
 		'}
 		end if
+
+		UpdateMinTimeBarTimeOffset()
 
 		m.visible_rows = m.top.content.GetChildCount()
 
@@ -1185,6 +1324,8 @@ sub OnContentChange()
 	else
 	'{
 		m.visible_rows = 0
+
+		UpdateMinTimeBarTimeOffset()
 	'}
 	end if
 
@@ -1261,77 +1402,62 @@ sub ScrollX( scroll_type as integer )
 
 	if scroll_type = 101 or scroll_type = 110  ' Move Left
 	'{
-		if m.time_bar_time_offset = 0
+		if scroll_type = 101 and m.selected_program_index > 0
 		'{
-			if scroll_type = 101 and m.selected_program_index > 0
+			skip_time_bar_update = true
+
+			m.programs.GetChild( m.selected_row_index ).GetChild( m.selected_program_index ).GetChild( 0 ).color = m.row_color
+			m.selected_program_index--
+			m.programs.GetChild( m.selected_row_index ).GetChild( m.selected_program_index ).GetChild( 0 ).color = m.row_selected_color
+
+			content_index = GetContentIndex( m.content_index )
+
+			UpdateProgramInfo( content_index, m.first_column_items[ m.selected_program_index ].index, m.first_column_items[ m.selected_program_index ].start_time, m.first_column_items[ m.selected_program_index ].end_time )
+		'}
+		' Scroll back in time. Scrolling before the current time (catch-up) is only possible if a channel supports it.
+		' When displaying the current time, the left button selects the channel list and the rewind button scrolls into the past.
+		else if m.channel_list_selected = false and m.time_bar_time_offset > m.min_time_bar_time_offset and ( m.time_bar_time_offset <> 0 or scroll_type = 110 )
+		'{
+			if m.selected_program_index > 0
 			'{
-				skip_time_bar_update = true
-
 				m.programs.GetChild( m.selected_row_index ).GetChild( m.selected_program_index ).GetChild( 0 ).color = m.row_color
-				m.selected_program_index--
+				m.selected_program_index = 0
 				m.programs.GetChild( m.selected_row_index ).GetChild( m.selected_program_index ).GetChild( 0 ).color = m.row_selected_color
+			'}
+			end if
 
-				content_index = GetContentIndex( m.content_index )
+			' Stop at the current time before scrolling into the past.
+			min_time_bar_time_offset = m.min_time_bar_time_offset
+			if m.time_bar_time_offset > 0
+			'{
+				min_time_bar_time_offset = 0
+			'}
+			end if
 
-				UpdateProgramInfo( content_index, m.first_column_items[ m.selected_program_index ].index, m.first_column_items[ m.selected_program_index ].start_time, m.first_column_items[ m.selected_program_index ].end_time )
+			if scroll_type = 110
+			'{
+				m.time_bar_time_offset = m.time_bar_time_offset - ( m.column_time_interval * m.column_count )
 			'}
 			else
 			'{
-				m.channels.GetChild( m.selected_row_index ).color = m.row_selected_color
-				m.programs.GetChild( m.selected_row_index ).GetChild( m.selected_program_index ).GetChild( 0 ).color = m.row_color
+				m.time_bar_time_offset = m.time_bar_time_offset - m.column_time_interval
+			'}
+			end if
 
-				m.selected_program_index = 0
-
-				m.channel_list_selected = true
+			if m.time_bar_time_offset < min_time_bar_time_offset
+			'{
+				m.time_bar_time_offset = min_time_bar_time_offset
 			'}
 			end if
 		'}
 		else
 		'{
-			if scroll_type = 101
-			'{
-				if m.selected_program_index > 0
-				'{
-					skip_time_bar_update = true
+			m.channels.GetChild( m.selected_row_index ).color = m.row_selected_color
+			m.programs.GetChild( m.selected_row_index ).GetChild( m.selected_program_index ).GetChild( 0 ).color = m.row_color
 
-					m.programs.GetChild( m.selected_row_index ).GetChild( m.selected_program_index ).GetChild( 0 ).color = m.row_color
-					m.selected_program_index--
-					m.programs.GetChild( m.selected_row_index ).GetChild( m.selected_program_index ).GetChild( 0 ).color = m.row_selected_color
+			m.selected_program_index = 0
 
-					content_index = GetContentIndex( m.content_index )
-
-					UpdateProgramInfo( content_index, m.first_column_items[ m.selected_program_index ].index, m.first_column_items[ m.selected_program_index ].start_time, m.first_column_items[ m.selected_program_index ].end_time )
-				'}
-				end if
-			'}
-			end if
-
-			if skip_time_bar_update = false
-			'{
-				if m.selected_program_index > 0
-				'{
-					m.programs.GetChild( m.selected_row_index ).GetChild( m.selected_program_index ).GetChild( 0 ).color = m.row_color
-					m.selected_program_index = 0
-					m.programs.GetChild( m.selected_row_index ).GetChild( m.selected_program_index ).GetChild( 0 ).color = m.row_selected_color
-				'}
-				end if
-
-				if scroll_type = 110
-				'{
-					m.time_bar_time_offset = m.time_bar_time_offset - ( m.column_time_interval * m.column_count )
-					if m.time_bar_time_offset < 0
-					'{
-						m.time_bar_time_offset = 0
-					'}
-					end if
-				'}
-				else
-				'{
-					m.time_bar_time_offset = m.time_bar_time_offset - m.column_time_interval
-				'}
-				end if
-			'}
-			end if
+			m.channel_list_selected = true
 		'}
 		end if
 	'}
@@ -1786,7 +1912,17 @@ function OnKeyEvent( key as string, press as boolean ) as boolean
 					content_index = GetContentIndex( m.content_index )
 					if content_index <> -1
 					'{
-						m.top.content_index = content_index
+						' Programs that have ended are played using catch-up if the channel supports it.
+						catchup_content = GetSelectedCatchupContent( false )
+						if catchup_content <> invalid
+						'{
+							m.top.catchup_content = catchup_content
+						'}
+						else
+						'{
+							m.top.content_index = content_index
+						'}
+						end if
 					'}
 					end if
 				'}
@@ -1870,6 +2006,9 @@ function OnKeyEvent( key as string, press as boolean ) as boolean
 					if content_index <> -1
 					'{
 						m.channel_options.content = m.top.content.GetChild( content_index )
+
+						' Allows the selected program to be played from its beginning.
+						m.channel_options.catchup_content = GetSelectedCatchupContent( true )
 
 						m.channel_options.menu_state = 1	' Show
 					'}

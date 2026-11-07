@@ -39,6 +39,8 @@ sub Init()
 	m.group_menu.ObserveField( "content_index", "OnGroupContentChange" )
 	m.channel_menu.ObserveField( "content_index", "OnChannelSelected" )
 	m.channel_guide.ObserveField( "content_index", "OnGuideChannelSelected" )
+	m.channel_guide.ObserveField( "catchup_content", "OnGuideCatchupSelected" )
+	m.video_player.ObserveField( "catchup_content", "OnVideoPlayerCatchupSelected" )
 	m.vod_menu.ObserveField( "content_index", "OnVODSelected" )
 
 	m.group_menu.ObserveField( "update_content", "OnUpdateGroupContent" )
@@ -808,6 +810,40 @@ sub PlayVideoContent( content as object, content_index as integer )
 '}
 end sub
 
+' Plays a Live TV program that's previously aired (or started airing) using catch-up.
+sub PlayCatchupContent( content as object )
+'{
+	if content <> invalid and content.GetChildCount() > 0
+	'{
+		m.video_content_type = 0	' Live TV
+
+		m.video_player.content = content
+
+		' The program's title.
+		m.video_player.video.content.Title = content.GetChild( 0 ).Title
+		m.video_player.video.content.Url = content.Url
+		m.video_player.video.content.StreamFormat = content.StreamFormat
+		m.video_player.video.content.HttpHeaders = content.HttpHeaders
+		m.video_player.video.content.SubtitleConfig = { TrackName: "eia608/1" }	' Closed captioning.
+
+		m.video_player.video.control = "play"
+	'}
+	end if
+'}
+end sub
+
+sub OnGuideCatchupSelected()
+'{
+	PlayCatchupContent( m.channel_guide.catchup_content )
+'}
+end sub
+
+sub OnVideoPlayerCatchupSelected()
+'{
+	PlayCatchupContent( m.video_player.catchup_content )
+'}
+end sub
+
 sub OnChannelSelected()
 '{
 	PlayVideoContent( m.channel_menu.content, m.channel_menu.content_index )
@@ -833,9 +869,13 @@ sub OnTVIsOff()
 	'{
 		m.top.tv_is_off = false
 
-		if m.video_content_type = 0	' Live TV
+		if m.video_content_type = 0 and ( m.video_player.content = invalid or m.video_player.content.IsCatchup = false )	' Live TV
 		'{
 			m.video_player.video.control = "stop"
+		'}
+		else if m.video_content_type = 0	' A catch-up program.
+		'{
+			m.video_player.video.control = "pause"
 		'}
 		else if m.video_content_type = 1 or m.video_content_type = 2	' Movies/TV Shows
 		'{

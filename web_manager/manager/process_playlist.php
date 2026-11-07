@@ -1,4 +1,6 @@
 <?php
+require_once( "../catchup.php" );
+
 $start_time = microtime( true );
 
 $total_items_added = 0;
@@ -24,6 +26,12 @@ if ( $handle )
 	$guide_id = 0;
 
 	$url_ids = [];
+
+	// Catch-up attributes set on the #EXTM3U line apply to every channel that doesn't set its own.
+	$header_catchup = ParseCatchupAttributes( "" );
+
+	// Catch-up values of channels that are already in the database. They're updated so that reprocessing a playlist picks up catch-up changes.
+	$catchup_updates = [];
 
 	$db_channels = new SQLite3( $channels_file_path );
 
@@ -71,7 +79,7 @@ if ( $handle )
 			{
 				$id = $arr[ "id" ];
 
-				$url_ids += [ $url_id => NULL ];
+				$url_ids += [ $url_id => true ];	// Exists in the database.
 			}
 		}
 	}
@@ -79,6 +87,8 @@ if ( $handle )
 	{
 		goto _EXIT;
 	}
+
+	AddCatchupColumns( $db_channels );
 
 	// Does our guide id map exist?
 	$query = "SELECT name FROM sqlite_master WHERE type='table' AND name='guide_id'";
@@ -101,7 +111,11 @@ if ( $handle )
 
 	while ( ( $line = fgets( $handle ) ) !== false )
 	{
-		if ( strncmp( $line, "#EXTINF", 7 ) == 0 )
+		if ( strncmp( $line, "#EXTM3U", 7 ) == 0 )
+		{
+			$header_catchup = ParseCatchupAttributes( $line );
+		}
+		else if ( strncmp( $line, "#EXTINF", 7 ) == 0 )
 		{
 			$url = fgets( $handle );
 
@@ -230,6 +244,8 @@ if ( $handle )
 
 						$name = trim( substr( $line, $name_start ) );
 
+						$catchup = MergeCatchupAttributes( ParseCatchupAttributes( $line ), $header_catchup );
+
 						// Groups
 						if ( !array_key_exists( $group, $groups ) )
 						{
@@ -243,6 +259,12 @@ if ( $handle )
 						$url_id = $url;
 
 						++$total_items;
+
+						if ( array_key_exists( $url_id, $url_ids ) && $url_ids[ $url_id ] === true )
+						{
+							// The channel was in the database before we started. Update its catch-up values.
+							$catchup_updates[ $url_id ] = $catchup;
+						}
 
 						// Only add unique URLs.
 						if ( !array_key_exists( $url_id, $url_ids ) )
@@ -273,7 +295,8 @@ if ( $handle )
 														  "guide_id" => $_guide_id,
 														  "url" => $url,
 														  "extension" => $extension,
-														  "logo_url" => $logo_url ) );
+														  "logo_url" => $logo_url,
+														  "catchup" => $catchup ) );
 
 							array_push( $groups[ $group ][ "channel_id_array" ], $id );
 						}
@@ -324,7 +347,7 @@ if ( $handle )
 
 	// Add the channels to the channels.db file.
 	$query = "";
-	$chunk_query = "INSERT OR IGNORE INTO [channel]( id, number, name, guide_id, url, extension, logo_url ) VALUES ";
+	$chunk_query = "INSERT OR IGNORE INTO [channel]( id, number, name, guide_id, url, extension, logo_url, catchup, catchup_source, catchup_days, catchup_correction ) VALUES ";
 	$chunk = 0;
 
 	foreach ( $channels as $channel )
@@ -342,7 +365,11 @@ if ( $handle )
 		$url = SQLite3::escapeString( $channel[ 'url' ] );
 		$extension = SQLite3::escapeString( $channel[ 'extension' ] );
 		$logo_url = SQLite3::escapeString( $channel[ 'logo_url' ] );
-		$query .= "('" . $channel[ 'id' ] . "','" . $channel[ 'number' ] . "','" . $name . "','" . $channel[ 'guide_id' ] . "','" . $url . "','" . $extension . "','" . $logo_url . "')";
+		$catchup = SQLite3::escapeString( $channel[ 'catchup' ][ 'catchup' ] );
+		$catchup_source = SQLite3::escapeString( $channel[ 'catchup' ][ 'catchup_source' ] );
+		$catchup_days = ( int )$channel[ 'catchup' ][ 'catchup_days' ];
+		$catchup_correction = ( float )$channel[ 'catchup' ][ 'catchup_correction' ];
+		$query .= "('" . $channel[ 'id' ] . "','" . $channel[ 'number' ] . "','" . $name . "','" . $channel[ 'guide_id' ] . "','" . $url . "','" . $extension . "','" . $logo_url . "','" . $catchup . "','" . $catchup_source . "'," . $catchup_days . "," . $catchup_correction . ")";
 		
 		++$chunk;
 		if ( $chunk >= 5000 )
@@ -356,6 +383,29 @@ if ( $handle )
 	if ( $chunk > 0 )
 	{
 		$results = $db_channels->query( $query );
+	}
+
+	// Update the catch-up values of channels that were already in the channels.db
+	if ( count( $catchup_updates ) > 0 )
+	{
+		$db_channels->exec( "BEGIN TRANSACTION" );
+
+		$statement = $db_channels->prepare( "UPDATE [channel] SET catchup = :catchup, catchup_source = :catchup_source, catchup_days = :catchup_days, catchup_correction = :catchup_correction WHERE url = :url" );
+
+		foreach ( $catchup_updates as $url => $catchup )
+		{
+			$statement->bindValue( ":catchup", $catchup[ "catchup" ], SQLITE3_TEXT );
+			$statement->bindValue( ":catchup_source", $catchup[ "catchup_source" ], SQLITE3_TEXT );
+			$statement->bindValue( ":catchup_days", ( int )$catchup[ "catchup_days" ], SQLITE3_INTEGER );
+			$statement->bindValue( ":catchup_correction", ( float )$catchup[ "catchup_correction" ], SQLITE3_FLOAT );
+			$statement->bindValue( ":url", $url, SQLITE3_TEXT );
+			$statement->execute();
+			$statement->reset();
+		}
+
+		$statement->close();
+
+		$db_channels->exec( "COMMIT" );
 	}
 
 	// Add the group-channel map to the channels.db

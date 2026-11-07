@@ -5,8 +5,10 @@
 		<field id="content" type="node" value="invalid" onChange="OnContentChange" />
 		<field id="resume" type="bool" value="false" onChange="OnResume" />
 		<field id="details_content" type="node" value="invalid" onChange="OnDetailsContentChange" alwaysnotify="true" />
+		<field id="catchup_content" type="node" value="invalid" alwaysnotify="true" />	<!-- Set to a program that should be played using catch-up. -->
 	</interface>
 	<script type="text/brightscript" uri="pkg:/components/screens/VideoPlayer/VideoPlayer.brs" />
+	<script type="text/brightscript" uri="pkg:/components/utils/Catchup.brs" />
 	<children>
 		<Video id="Video" />
 		<Rectangle id="Background" />
