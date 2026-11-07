@@ -33,6 +33,13 @@ if ( $handle )
 	// Catch-up values of channels that are already in the database. They're updated so that reprocessing a playlist picks up catch-up changes.
 	$catchup_updates = [];
 
+	// Channel numbers that the playlist sets for channels that are already in the database.
+	$number_updates = [];
+
+	// Channel numbers that are in use. Channels without a number in the playlist are given the next unused number.
+	$used_numbers = [];
+	$max_number = 0;
+
 	$db_channels = new SQLite3( $channels_file_path );
 
 	// Does our group list exist?
@@ -74,6 +81,12 @@ if ( $handle )
 		while ( $arr = $results->fetchArray( SQLITE3_ASSOC ) )
 		{
 			$url_id = $arr[ "url" ];
+
+			$used_numbers[ ( int )$arr[ "number" ] ] = true;
+			if ( ( int )$arr[ "number" ] > $max_number )
+			{
+				$max_number = ( int )$arr[ "number" ];
+			}
 
 			if ( !array_key_exists( $url_id, $url_ids ) )
 			{
@@ -246,6 +259,8 @@ if ( $handle )
 
 						$catchup = MergeCatchupAttributes( ParseCatchupAttributes( $line ), $header_catchup );
 
+						$number = GetM3UChannelNumber( $line, $guide_id_name );
+
 						// Groups
 						if ( !array_key_exists( $group, $groups ) )
 						{
@@ -262,8 +277,13 @@ if ( $handle )
 
 						if ( array_key_exists( $url_id, $url_ids ) && $url_ids[ $url_id ] === true )
 						{
-							// The channel was in the database before we started. Update its catch-up values.
+							// The channel was in the database before we started. Update its catch-up values and number.
 							$catchup_updates[ $url_id ] = $catchup;
+
+							if ( $number !== NULL )
+							{
+								$number_updates[ $url_id ] = $number;
+							}
 						}
 
 						// Only add unique URLs.
@@ -283,14 +303,21 @@ if ( $handle )
 							++$id;
 							
 							$_guide_id = 0;
-							if ( $guide_id_name != "" && !array_key_exists( $guide_id_name, $guide_ids ) )
+							if ( $guide_id_name != "" )
 							{
-								$_guide_id = ++$guide_id;
-								$guide_ids += [ $guide_id_name => $_guide_id ];
+								if ( !array_key_exists( $guide_id_name, $guide_ids ) )
+								{
+									$_guide_id = ++$guide_id;
+									$guide_ids += [ $guide_id_name => $_guide_id ];
+								}
+								else	// Another channel (or a previously processed playlist) uses the same guide ID.
+								{
+									$_guide_id = $guide_ids[ $guide_id_name ];
+								}
 							}
 
 							array_push( $channels, array( "id" => $id,
-														  "number" => $id + 1,
+														  "number" => $number,	// NULL if the playlist doesn't set one. It's assigned below.
 														  "name" => $name,
 														  "guide_id" => $_guide_id,
 														  "url" => $url,
@@ -345,6 +372,35 @@ if ( $handle )
 		$results = $db_channels->query( $query );
 	}
 
+	// Channels that the playlist doesn't number are given the next unused number.
+	foreach ( $channels as $channel )
+	{
+		if ( $channel[ "number" ] !== NULL )
+		{
+			$used_numbers[ $channel[ "number" ] ] = true;
+		}
+	}
+	foreach ( $number_updates as $number )
+	{
+		$used_numbers[ $number ] = true;
+	}
+
+	$next_number = $max_number + 1;
+	foreach ( $channels as &$channel )
+	{
+		if ( $channel[ "number" ] === NULL )
+		{
+			while ( isset( $used_numbers[ $next_number ] ) )
+			{
+				++$next_number;
+			}
+
+			$channel[ "number" ] = $next_number;
+			$used_numbers[ $next_number ] = true;
+		}
+	}
+	unset( $channel );
+
 	// Add the channels to the channels.db file.
 	$query = "";
 	$chunk_query = "INSERT OR IGNORE INTO [channel]( id, number, name, guide_id, url, extension, logo_url, catchup, catchup_source, catchup_days, catchup_correction ) VALUES ";
@@ -398,6 +454,26 @@ if ( $handle )
 			$statement->bindValue( ":catchup_source", $catchup[ "catchup_source" ], SQLITE3_TEXT );
 			$statement->bindValue( ":catchup_days", ( int )$catchup[ "catchup_days" ], SQLITE3_INTEGER );
 			$statement->bindValue( ":catchup_correction", ( float )$catchup[ "catchup_correction" ], SQLITE3_FLOAT );
+			$statement->bindValue( ":url", $url, SQLITE3_TEXT );
+			$statement->execute();
+			$statement->reset();
+		}
+
+		$statement->close();
+
+		$db_channels->exec( "COMMIT" );
+	}
+
+	// Update the numbers of channels that were already in the channels.db
+	if ( count( $number_updates ) > 0 )
+	{
+		$db_channels->exec( "BEGIN TRANSACTION" );
+
+		$statement = $db_channels->prepare( "UPDATE [channel] SET number = :number WHERE url = :url" );
+
+		foreach ( $number_updates as $url => $number )
+		{
+			$statement->bindValue( ":number", $number, SQLITE3_INTEGER );
 			$statement->bindValue( ":url", $url, SQLITE3_TEXT );
 			$statement->execute();
 			$statement->reset();

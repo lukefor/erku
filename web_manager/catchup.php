@@ -1,4 +1,6 @@
 <?php
+require_once( __DIR__ . "/m3u.php" );
+
 //
 // Catch-up (timeshift/archive) support.
 //
@@ -23,17 +25,6 @@
 
 // The number of days of catch-up that's assumed when a mode is set without a day count.
 const CATCHUP_DEFAULT_DAYS = 5;
-
-// Returns the value of an attribute in an #EXTM3U or #EXTINF line, or NULL if it's not present.
-function GetM3UAttribute( $line, $name )
-{
-	if ( preg_match( '/(?:^|[\s,])' . preg_quote( $name, '/' ) . '="([^"]*)"/i', $line, $matches ) )
-	{
-		return $matches[ 1 ];
-	}
-
-	return NULL;
-}
 
 // Reads the catch-up attributes of an #EXTM3U or #EXTINF line.
 // Attributes that aren't present are NULL.
